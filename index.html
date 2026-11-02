@@ -9,7 +9,7 @@
                 padding-top: 50px;
             }
 
-            /* Three columns: empty space, the weather in the middle, saved towns on the right */
+            /* Three columns: 10-day forecast on the left, the weather in the middle, saved towns on the right */
             .page {
                 display: grid;
                 grid-template-columns: 1fr auto 1fr;
@@ -29,8 +29,10 @@
                 }
 
                 .page .main,
+                .page .forecast,
                 .page .saved {
                     grid-column: 1;
+                    grid-row: auto;
                     justify-self: center;
                 }
             }
@@ -42,11 +44,6 @@
                 line-height: 1;
                 margin-top: 0;
                 margin-bottom: 10px;
-            }
-
-            .main p {
-                margin-top: 0;
-                margin-bottom: 15px;
             }
 
             input {
@@ -108,6 +105,26 @@
                 margin-top: 20px;
             }
 
+            /* 10-day forecast */
+            /* Centered in the space between the left edge and the weather */
+            .forecast {
+                grid-column: 1;
+                grid-row: 1;
+                justify-self: center;
+                width: 320px;
+                color: white;
+            }
+
+            td.rain {
+                text-align: right;
+                color: rgb(41, 144, 228);
+                white-space: nowrap;
+            }
+
+            #no-forecast {
+                color: rgb(150, 150, 150);
+            }
+
             /* Saved towns table */
             /* Centered in the space between the weather and the right edge */
             .saved {
@@ -117,6 +134,7 @@
                 color: white;
             }
 
+            .forecast h2,
             .saved h2 {
                 color: rgb(41, 144, 228);
                 margin-top: 0;
@@ -163,11 +181,16 @@
         <div class="page">
             <div class="main">
                 <h1>Weather App</h1>
-                <p>Hello! This is my first web page.</p>
                 <input type="text" id="city" placeholder="Enter a city">
                 <button id="search">Get Weather</button>
                 <br>
                 <div id="result"></div>
+            </div>
+
+            <div class="forecast">
+                <h2>10-Day Forecast</h2>
+                <p id="no-forecast">Search for a town to see its 10-day forecast.</p>
+                <table id="forecast-table"></table>
             </div>
 
             <div class="saved">
@@ -183,6 +206,8 @@
             const result = document.getElementById("result");
             const savedTable = document.getElementById("saved-table");
             const noSaved = document.getElementById("no-saved");
+            const forecastTable = document.getElementById("forecast-table");
+            const noForecast = document.getElementById("no-forecast");
 
             // Turns a state name like "Texas" into "TX"
             const stateCodes = {
@@ -243,6 +268,62 @@
                     + "&hourly=precipitation&past_hours=720&forecast_hours=1"
                     + "&models=ncep_nbm_conus&timezone=auto"
                     + "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch";
+            }
+
+            // Asks for the high, low, and rain chance for the next 10 days
+            function forecastUrlFor(town) {
+                return "https://api.open-meteo.com/v1/forecast?latitude=" + town.latitude
+                    + "&longitude=" + town.longitude
+                    + "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+                    + "&forecast_days=10&timezone=auto&temperature_unit=fahrenheit";
+            }
+
+            // Builds the 10-day forecast table: Today first, then "Tue 11/3" and so on
+            async function showForecast(town) {
+                const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                forecastTable.innerHTML = "";
+                noForecast.style.display = "block";
+                noForecast.textContent = "Loading...";
+                try {
+                    const response = await fetch(forecastUrlFor(town));
+                    const data = await response.json();
+
+                    noForecast.style.display = "none";
+
+                    data.daily.time.forEach(function (day, i) {
+                        // day looks like "2026-11-03"
+                        const parts = day.split("-");
+                        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+                        let label = dayNames[date.getDay()] + " " + (date.getMonth() + 1) + "/" + date.getDate();
+                        if (i === 0) {
+                            label = "Today";
+                        }
+
+                        const high = Math.round(data.daily.temperature_2m_max[i]);
+                        const low = Math.round(data.daily.temperature_2m_min[i]);
+                        const rain = data.daily.precipitation_probability_max[i];
+
+                        const row = document.createElement("tr");
+
+                        const dayCell = document.createElement("td");
+                        dayCell.textContent = label;
+
+                        const hiloCell = document.createElement("td");
+                        hiloCell.className = "hilo";
+                        hiloCell.textContent = high + "° / " + low + "°";
+
+                        const rainCell = document.createElement("td");
+                        rainCell.className = "rain";
+                        rainCell.textContent = rain === null ? "--" : rain + "%";
+
+                        row.appendChild(dayCell);
+                        row.appendChild(hiloCell);
+                        row.appendChild(rainCell);
+                        forecastTable.appendChild(row);
+                    });
+                } catch (error) {
+                    noForecast.textContent = "Couldn't load the forecast.";
+                }
             }
 
             // Shows the + button if the town isn't saved, or - if it is
@@ -323,6 +404,7 @@
             // Looks up and shows all the weather for one town
             async function showWeather(town) {
                 result.textContent = "Looking up " + town.name + "...";
+                showForecast(town);
                 try {
                     // Location -> weather (using NOAA's National Blend of Models)
                     const weatherResponse = await fetch(weatherUrlFor(town));
