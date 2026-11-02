@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>My Weather App</title>
+                <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: rgb(0, 0, 0);
+                padding-top: 50px;
+            }
+
+            /* Three columns: empty space, the weather in the middle, saved towns on the right */
+            .page {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr;
+                gap: 30px;
+                align-items: start;
+            }
+
+            .main {
+                grid-column: 2;
+                text-align: center;
+            }
+
+            /* On small screens (like a phone), stack the table under the weather */
+            @media (max-width: 1000px) {
+                .page {
+                    grid-template-columns: 1fr;
+                }
+
+                .page .main,
+                .page .saved {
+                    grid-column: 1;
+                    justify-self: center;
+                }
+            }
+
+            /* No space above the title so it lines up with the Saved Towns header */
+            h1 {
+                color: rgb(41, 144, 228);
+                font-size: 48px;
+                line-height: 1;
+                margin-top: 0;
+                margin-bottom: 10px;
+            }
+
+            .main p {
+                margin-top: 0;
+                margin-bottom: 15px;
+            }
+
+            input {
+                padding: 10px;
+                font-size: 16px;
+                border: none;
+                border-radius: 8px;
+            }
+
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                border: none;
+                border-radius: 8px;
+                background-color: rgb(233, 219, 28);
+                color: rgb(0, 0, 0);
+                cursor: pointer;
+            }
+
+            button:hover {
+                background-color: rgb(252, 252, 252);
+            }
+
+            /* The box sits in the center, but the text inside lines up on the left */
+            #result {
+                display: inline-block;
+                text-align: left;
+                color: white;
+                font-size: 22px;
+                margin-top: 15px;
+            }
+
+            .town {
+                font-size: 30px;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+
+            /* The small + / - button next to the town name */
+            #save-button {
+                padding: 0;
+                width: 34px;
+                height: 34px;
+                font-size: 24px;
+                font-weight: bold;
+                line-height: 34px;
+                margin-left: 15px;
+                vertical-align: middle;
+            }
+
+            /* Current temp on the left, Hi/Lo on the right */
+            .temp-row span + span {
+                margin-left: 40px;
+                color: rgb(180, 180, 180);
+            }
+
+            .section-title {
+                font-weight: bold;
+                margin-top: 20px;
+            }
+
+            /* Saved towns table */
+            /* Centered in the space between the weather and the right edge */
+            .saved {
+                grid-column: 3;
+                justify-self: center;
+                width: 320px;
+                color: white;
+            }
+
+            .saved h2 {
+                color: rgb(41, 144, 228);
+                margin-top: 0;
+                text-align: left;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 18px;
+            }
+
+            td {
+                padding: 8px;
+                border-bottom: 1px solid rgb(60, 60, 60);
+            }
+
+            /* Town names start right under the header */
+            td:first-child {
+                padding-left: 0;
+                text-align: left;
+            }
+
+            td.hilo {
+                text-align: right;
+                color: rgb(180, 180, 180);
+                white-space: nowrap;
+            }
+
+            tr.saved-town {
+                cursor: pointer;
+            }
+
+            tr.saved-town:hover {
+                background-color: rgb(40, 40, 40);
+            }
+
+            #no-saved {
+                color: rgb(150, 150, 150);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="page">
+            <div class="main">
+                <h1>Weather App</h1>
+                <p>Hello! This is my first web page.</p>
+                <input type="text" id="city" placeholder="Enter a city">
+                <button id="search">Get Weather</button>
+                <br>
+                <div id="result"></div>
+            </div>
+
+            <div class="saved">
+                <h2>Saved Towns</h2>
+                <p id="no-saved">No saved towns yet. Search for a town and click + to save it.</p>
+                <table id="saved-table"></table>
+            </div>
+        </div>
+
+         <script>
+            const button = document.getElementById("search");
+            const cityBox = document.getElementById("city");
+            const result = document.getElementById("result");
+            const savedTable = document.getElementById("saved-table");
+            const noSaved = document.getElementById("no-saved");
+
+            // Turns a state name like "Texas" into "TX"
+            const stateCodes = {
+                "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA",
+                "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE", "District of Columbia": "DC",
+                "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL",
+                "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA",
+                "Maine": "ME", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN",
+                "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV",
+                "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
+                "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR",
+                "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC", "South Dakota": "SD",
+                "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA",
+                "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY"
+            };
+
+            // The town currently showing on the screen
+            let currentTown = null;
+
+            // Saved towns are kept in the browser so they're still there next time
+            let savedTowns = [];
+            try {
+                savedTowns = JSON.parse(localStorage.getItem("savedTowns")) || [];
+            } catch (error) {
+                savedTowns = [];
+            }
+
+            function storeSavedTowns() {
+                try {
+                    localStorage.setItem("savedTowns", JSON.stringify(savedTowns));
+                } catch (error) {
+                    // If the browser won't let us save, the list still works until the page closes
+                }
+            }
+
+            // Adds up the last "count" numbers in a list
+            function addUpLast(list, count) {
+                let total = 0;
+                for (let i = list.length - count; i < list.length; i++) {
+                    total = total + list[i];
+                }
+                return total.toFixed(2);
+            }
+
+            // Finds where a town is in the saved list (-1 means it isn't saved)
+            function findSaved(town) {
+                return savedTowns.findIndex(function (saved) {
+                    return saved.name === town.name && saved.state === town.state;
+                });
+            }
+
+            // Asks for today's high and low for a town
+            function weatherUrlFor(town) {
+                return "https://api.open-meteo.com/v1/forecast?latitude=" + town.latitude
+                    + "&longitude=" + town.longitude
+                    + "&current=temperature_2m,wind_speed_10m,relative_humidity_2m"
+                    + "&daily=temperature_2m_max,temperature_2m_min&forecast_days=1"
+                    + "&hourly=precipitation&past_hours=720&forecast_hours=1"
+                    + "&models=ncep_nbm_conus&timezone=auto"
+                    + "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch";
+            }
+
+            // Shows the + button if the town isn't saved, or - if it is
+            function updateSaveButton() {
+                const saveButton = document.getElementById("save-button");
+                if (!saveButton || !currentTown) {
+                    return;
+                }
+                if (findSaved(currentTown) === -1) {
+                    saveButton.textContent = "+";
+                    saveButton.title = "Save this town";
+                } else {
+                    saveButton.textContent = "−";
+                    saveButton.title = "Remove this town";
+                }
+            }
+
+            // Adds or removes the current town from the saved list
+            function toggleSaved() {
+                const index = findSaved(currentTown);
+                if (index === -1) {
+                    savedTowns.push(currentTown);
+                } else {
+                    savedTowns.splice(index, 1);
+                }
+                storeSavedTowns();
+                showSavedTowns();
+                updateSaveButton();
+            }
+
+            // Builds the saved towns table: sorted by state, then by town name
+            function showSavedTowns() {
+                savedTowns.sort(function (a, b) {
+                    if (a.state !== b.state) {
+                        return a.state.localeCompare(b.state);
+                    }
+                    return a.name.localeCompare(b.name);
+                });
+
+                savedTable.innerHTML = "";
+                noSaved.style.display = savedTowns.length === 0 ? "block" : "none";
+
+                savedTowns.forEach(function (town) {
+                    const row = document.createElement("tr");
+                    row.className = "saved-town";
+
+                    const nameCell = document.createElement("td");
+                    nameCell.textContent = town.name + ", " + town.state;
+
+                    const hiloCell = document.createElement("td");
+                    hiloCell.className = "hilo";
+                    hiloCell.textContent = "...";
+
+                    row.appendChild(nameCell);
+                    row.appendChild(hiloCell);
+                    savedTable.appendChild(row);
+
+                    // Clicking a saved town pulls up its weather right away
+                    row.addEventListener("click", function () {
+                        cityBox.value = town.name;
+                        showWeather(town);
+                    });
+
+                    // Fill in the Hi/Lo once it comes back
+                    fetch(weatherUrlFor(town))
+                        .then(function (response) { return response.json(); })
+                        .then(function (data) {
+                            const high = data.daily.temperature_2m_max[0];
+                            const low = data.daily.temperature_2m_min[0];
+                            hiloCell.textContent = "Hi " + high + "° / Lo " + low + "°";
+                        })
+                        .catch(function () {
+                            hiloCell.textContent = "--";
+                        });
+                });
+            }
+
+            // Looks up and shows all the weather for one town
+            async function showWeather(town) {
+                result.textContent = "Looking up " + town.name + "...";
+                try {
+                    // Location -> weather (using NOAA's National Blend of Models)
+                    const weatherResponse = await fetch(weatherUrlFor(town));
+                    const weatherData = await weatherResponse.json();
+
+                    const temperature = weatherData.current.temperature_2m;
+                    const wind = weatherData.current.wind_speed_10m;
+                    const humidity = weatherData.current.relative_humidity_2m;
+                    const high = weatherData.daily.temperature_2m_max[0];
+                    const low = weatherData.daily.temperature_2m_min[0];
+
+                    // Rain for each hour of the last 30 days
+                    const hourlyRain = weatherData.hourly.precipitation;
+
+                    // Rain for every hour since January 1 (same model)
+                    const now = weatherData.hourly.time[weatherData.hourly.time.length - 1];
+                    const year = now.slice(0, 4);
+                    const historyUrl = "https://historical-forecast-api.open-meteo.com/v1/forecast?latitude=" + town.latitude
+                        + "&longitude=" + town.longitude
+                        + "&start_hour=" + year + "-01-01T00:00&end_hour=" + now
+                        + "&hourly=precipitation&models=ncep_nbm_conus"
+                        + "&timezone=auto&precipitation_unit=inch";
+                    const historyResponse = await fetch(historyUrl);
+                    const historyData = await historyResponse.json();
+                    const yearRain = historyData.hourly.precipitation;
+
+                    currentTown = town;
+
+                    result.innerHTML =
+                          "<div class='town'>" + town.name + ", " + town.state
+                        + "<button id='save-button'></button></div>"
+                        + "<div class='temp-row'><span>Temp: " + temperature + "°F</span>"
+                        + "<span>Hi " + high + "°F / Lo " + low + "°F</span></div>"
+                        + "<div>Wind: " + wind + " mph</div>"
+                        + "<div>Humidity: " + humidity + "%</div>"
+                        + "<div class='section-title'>Rain</div>"
+                        + "<div>Last 24 hours: " + addUpLast(hourlyRain, 24) + " in</div>"
+                        + "<div>Last 48 hours: " + addUpLast(hourlyRain, 48) + " in</div>"
+                        + "<div>Last 72 hours: " + addUpLast(hourlyRain, 72) + " in</div>"
+                        + "<div>Last week: " + addUpLast(hourlyRain, 168) + " in</div>"
+                        + "<div>Last 30 days: " + addUpLast(hourlyRain, 720) + " in</div>"
+                        + "<div>This year: " + addUpLast(yearRain, yearRain.length) + " in</div>";
+
+                    document.getElementById("save-button").addEventListener("click", toggleSaved);
+                    updateSaveButton();
+                } catch (error) {
+                    result.textContent = "Something went wrong. Check your internet connection and try again.";
+                }
+            }
+
+            button.addEventListener("click", async function () {
+                const city = cityBox.value;
+                if (city === "") {
+                    result.textContent = "Please type a city name.";
+                    return;
+                }
+                result.textContent = "Looking up " + city + "...";
+                try {
+                    // City name -> location
+                    const url = "https://geocoding-api.open-meteo.com/v1/search?name=" + city + "&count=1&countryCode=US";
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (!data.results) {
+                        result.textContent = "Sorry, I couldn't find a city called " + city + ".";
+                        return;
+                    }
+                    const place = data.results[0];
+
+                    showWeather({
+                        name: place.name,
+                        state: stateCodes[place.admin1] || place.admin1,
+                        latitude: place.latitude,
+                        longitude: place.longitude
+                    });
+                } catch (error) {
+                    result.textContent = "Something went wrong. Check your internet connection and try again.";
+                }
+            });
+
+            // Pressing Enter in the city box does the same thing as clicking the button
+            cityBox.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") {
+                    button.click();
+                }
+            });
+
+            // Show any saved towns as soon as the page opens
+            showSavedTowns();
+        </script>
+    </body>
+</html>
